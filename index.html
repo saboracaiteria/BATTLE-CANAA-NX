@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BATTLE CANAÃ - FIXED START</title>
+    <title>BATTLE CANAÃ - FINAL POLISHED</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; touch-action: none; user-select: none; font-family: sans-serif; }
         
@@ -45,7 +45,7 @@
         }
         #health-bar { width: 100%; height: 100%; background: #0f0; transition: width 0.2s, background 0.2s; }
         
-        /* Controls */
+        /* Controls - Default Positions (Will be overwritten by JS if saved) */
         #joystick-zone {
             position: absolute; bottom: 40px; left: 40px;
             width: 120px; height: 120px;
@@ -65,14 +65,14 @@
         }
         .action-btn:active { background: rgba(255,255,255,0.2); transform: scale(0.95); }
 
+        /* HUD STANDARD LAYOUT */
         #btn-fire { bottom: 60px; right: 40px; width: 80px; height: 80px; background: rgba(255,0,0,0.2); border-color: #f55; font-size: 24px; }
-        #btn-jump { bottom: 160px; right: 50px; width: 60px; height: 60px; font-size: 20px; }
-        #btn-nade { bottom: 60px; right: 140px; width: 60px; height: 60px; font-size: 20px; border-color: #fa0; }
-        #btn-switch-nade { bottom: 130px; right: 140px; width: 40px; height: 40px; font-size: 16px; border-color: #aaa; background: rgba(0,0,0,0.5); }
-        
-        #btn-view { bottom: 230px; right: 50px; width: 50px; height: 50px; font-size: 20px; } 
-        #btn-sprint { bottom: 40px; left: 180px; width: 50px; height: 50px; font-size: 20px; background: rgba(255,255,0,0.2); border-color: yellow; }
-        #btn-ads { bottom: 150px; right: 40px; width: 60px; height: 60px; font-size: 24px; border-color: cyan; }
+        #btn-ads { bottom: 160px; right: 40px; width: 60px; height: 60px; font-size: 24px; border-color: cyan; }
+        #btn-jump { bottom: 60px; right: 140px; width: 60px; height: 60px; font-size: 20px; }
+        #btn-sprint { bottom: 160px; left: 40px; width: 50px; height: 50px; font-size: 20px; background: rgba(255,255,0,0.2); border-color: yellow; } /* Near joystick */
+        #btn-nade { bottom: 140px; right: 140px; width: 50px; height: 50px; font-size: 20px; border-color: #fa0; }
+        #btn-switch-nade { bottom: 200px; right: 140px; width: 40px; height: 40px; font-size: 16px; border-color: #aaa; background: rgba(0,0,0,0.5); }
+        #btn-view { top: 60px; right: 20px; width: 40px; height: 40px; font-size: 16px; }
 
         #btn-pause {
             pointer-events: auto; background: none; border: none; font-size: 24px; color: white; cursor: pointer;
@@ -90,14 +90,11 @@
             width: 4px; height: 4px; background: red; border-radius: 50%;
         }
 
-        #start-screen, #game-over-screen, #pause-menu, #rotate-screen {
-            position: absolute; inset: 0; background: rgba(0,0,0,0.95); z-index: 50;
+        #start-screen, #game-over-screen, #pause-menu {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.9); z-index: 50;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            color: white; overflow-y: auto; text-align: center;
+            color: white; overflow-y: auto;
         }
-        
-        #rotate-screen { display: none; }
-
         .hidden { display: none !important; }
         
         button.start-btn, button.menu-btn {
@@ -123,20 +120,10 @@
         @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-50px); } }
         
         .draggable { border: 2px dashed yellow !important; background: rgba(255,255,0,0.2) !important; }
-
-        @media screen and (orientation: portrait) {
-            #rotate-screen { display: flex !important; }
-        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-
-    <div id="rotate-screen">
-        <h1>Gire o Celular 🔄</h1>
-        <p>Melhor experiência em modo paisagem.</p>
-        <button class="menu-btn" style="margin-top: 30px; background: #555; color: #ccc;" onclick="document.getElementById('rotate-screen').style.display = 'none';">JOGAR ASSIM MESMO</button>
-    </div>
 
     <div id="damage-flash"></div>
 
@@ -169,7 +156,7 @@
     <div id="start-screen" class="interactive">
         <h1 style="color: #f90; font-size: 40px; text-shadow: 2px 2px #000; margin-bottom: 0;">BATTLE CANAÃ</h1>
         <p>Sobreviva. O gás está chegando.</p>
-        <button id="start-btn" class="start-btn" onclick="tryStartGame()">CAIA NA PRAÇA</button>
+        <button class="start-btn" onclick="startGame()">CAIA NA PRAÇA</button>
     </div>
 
     <div id="pause-menu" class="interactive hidden">
@@ -206,8 +193,8 @@
             </select>
         </div>
         <button class="menu-btn" style="background:#55f" onclick="toggleHudEdit()">MOVER BOTÕES</button>
+        <button class="menu-btn" style="background:#f55" onclick="resetHud()">RESETAR HUD</button>
         <button class="menu-btn" onclick="togglePause()">CONTINUAR</button>
-        <button class="menu-btn" style="background:#f55" onclick="location.reload()">SAIR</button>
     </div>
 
     <div id="game-over-screen" class="interactive hidden">
@@ -222,77 +209,67 @@
         const SPRINT_SPEED = 0.25;
         const MAP_SIZE = 200;
         
-        let scene, camera, renderer;
-        let isThreeLoaded = false;
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 60, 500);
 
-        // Try to initialize Three.js safely
-        try {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 60, 500);
+        const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-            camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: false });
+        // FIX: Update camera on resize to prevent aim skew
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+        });
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-            dirLight.position.set(50, 100, 50);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
-            scene.add(dirLight);
-            
-            isThreeLoaded = true;
-        } catch (e) {
-            console.error("Three.js failed to load", e);
-            alert("Erro ao carregar gráficos 3D. Verifique sua conexão.");
-        }
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
 
         let audioCtx;
         function initAudio() {
-            try {
-                if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                if(audioCtx.state === 'suspended') audioCtx.resume();
-            } catch(e) {
-                console.log("Audio not supported");
-            }
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if(audioCtx.state === 'suspended') audioCtx.resume();
         }
 
         function playSound(type) {
             if(!audioCtx) return;
-            try {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                const vol = settings.volume;
-                
-                if(type === 'shoot') {
-                    osc.type = 'square'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                    gain.gain.setValueAtTime(0.1 * vol, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                } else if (type === 'explode') {
-                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                    gain.gain.setValueAtTime(1 * vol, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                } else if (type === 'pickup') {
-                    osc.type = 'sine'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-                    osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.1);
-                    gain.gain.setValueAtTime(0.2 * vol, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-                } else if (type === 'headshot') { 
-                    osc.type = 'triangle'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                    gain.gain.setValueAtTime(0.3 * vol, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                }
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-            } catch(e) {}
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const vol = settings.volume;
+            
+            if(type === 'shoot') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1 * vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            } else if (type === 'explode') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                gain.gain.setValueAtTime(1 * vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            } else if (type === 'pickup') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.2 * vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            } else if (type === 'headshot') { 
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3 * vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            }
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
         }
 
         let isPlaying = false;
@@ -307,7 +284,6 @@
         let gameTime = 0; 
         let cameraMode = 'TPS'; 
 
-        // Settings Functions
         window.togglePause = () => {
             if(!isPlaying) return;
             isPaused = !isPaused;
@@ -328,8 +304,44 @@
             }
         };
 
-        // HUD Editor
+        // --- HUD EDITOR & SAVING ---
         let dragItem = null, dragOffsetX = 0, dragOffsetY = 0;
+
+        function loadHud() {
+            const saved = localStorage.getItem('battleCanaaHud');
+            if(saved) {
+                const positions = JSON.parse(saved);
+                for (const id in positions) {
+                    const el = document.getElementById(id);
+                    if(el) {
+                        el.style.left = positions[id].left;
+                        el.style.top = positions[id].top;
+                        el.style.right = positions[id].right;
+                        el.style.bottom = positions[id].bottom;
+                    }
+                }
+            }
+        }
+
+        function saveHud() {
+            const positions = {};
+            const btns = document.querySelectorAll('.action-btn, #joystick-zone, #minimap-container');
+            btns.forEach(b => {
+                positions[b.id] = {
+                    left: b.style.left,
+                    top: b.style.top,
+                    right: b.style.right,
+                    bottom: b.style.bottom
+                };
+            });
+            localStorage.setItem('battleCanaaHud', JSON.stringify(positions));
+        }
+
+        window.resetHud = () => {
+            localStorage.removeItem('battleCanaaHud');
+            location.reload();
+        }
+
         window.toggleHudEdit = () => {
             isHudEditing = !isHudEditing;
             const menu = document.getElementById('pause-menu');
@@ -341,7 +353,7 @@
                 doneBtn.id = 'hud-done-btn';
                 doneBtn.innerText = "SALVAR HUD";
                 doneBtn.style.position = 'absolute'; doneBtn.style.top = '10px'; doneBtn.style.left = '50%'; doneBtn.style.transform = 'translateX(-50%)'; doneBtn.style.zIndex = '100';
-                doneBtn.onclick = toggleHudEdit;
+                doneBtn.onclick = () => { saveHud(); toggleHudEdit(); };
                 document.body.appendChild(doneBtn);
             } else {
                 const doneBtn = document.getElementById('hud-done-btn');
@@ -355,6 +367,7 @@
         function onDragMove(e) { if(!dragItem) return; e.preventDefault(); const touch = e.touches[0]; dragItem.style.bottom = 'auto'; dragItem.style.right = 'auto'; dragItem.style.left = (touch.clientX - dragOffsetX) + 'px'; dragItem.style.top = (touch.clientY - dragOffsetY) + 'px'; }
         function onDragEnd() { window.removeEventListener('touchmove', onDragMove); window.removeEventListener('touchend', onDragEnd); dragItem = null; }
 
+        // --- VFX ---
         const fxList = [];
         const animals = [];
 
@@ -596,7 +609,8 @@
             header.position.set(0, h - h/6, d/2); houseGroup.add(header); obstacles.push(header);
 
             const roofHeight = 4;
-            const roofCol = new THREE.Mesh(new THREE.BoxGeometry(w + 1, 2, d + 1), new THREE.MeshBasicMaterial({visible:false}));
+            // FIX: Extend roof collider to prevent slipping off edges
+            const roofCol = new THREE.Mesh(new THREE.BoxGeometry(w+2, 2, d+2), new THREE.MeshBasicMaterial({visible:false}));
             roofCol.position.set(0, h + 2, 0); 
             houseGroup.add(roofCol);
             roofs.push(roofCol); 
@@ -608,7 +622,8 @@
             obstacles.push(roof); 
 
             if(floors > 1) {
-                const rampLen = 14; const rampH = 6; 
+                const rampLen = 14; 
+                const rampH = 6; 
                 const rampGeo = new THREE.BoxGeometry(3, 0.5, rampLen);
                 const ramp = new THREE.Mesh(rampGeo, new THREE.MeshLambertMaterial({color: 0x664422}));
                 const slopeAngle = Math.asin(rampH/rampLen);
@@ -629,6 +644,10 @@
                 houseGroup.add(balc);
                 roofs.push(balc);
                 obstacles.push(balc); 
+                // Balcony floor filler to prevent holes
+                const balcFiller = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, 4), floorMat);
+                balcFiller.position.set(0, 5.75, d/2);
+                houseGroup.add(balcFiller); roofs.push(balcFiller);
 
                 const floor2 = new THREE.Mesh(new THREE.BoxGeometry(w - 0.5, 0.5, d + 3), floorMat);
                 floor2.position.set(0, 5.75, 1.5); 
@@ -828,6 +847,7 @@
             enemy.userData.speed = 0.08 + Math.random() * 0.04;
             enemy.userData.state = state;
             enemy.userData.patrolTarget = new THREE.Vector3();
+            // FIX: Initialize physics vars
             enemy.userData.verticalVelocity = 0;
             enemy.userData.isGrounded = true;
             enemy.userData.waitTime = 100 + Math.random() * 200; 
@@ -919,17 +939,10 @@
             document.body.classList.remove('ads-active');
             camera.fov = settings.fov; camera.updateProjectionMatrix();
         });
-
-        function tryStartGame() {
-            if (!isThreeLoaded) {
-                alert("Erro: O motor gráfico ainda não carregou. Verifique sua internet.");
-                return;
-            }
-            startGame();
-        }
-
+        
         function startGame() {
             initAudio();
+            loadHud(); // Load saved HUD
             createWorld();
             spawnEnemies();
             document.getElementById('start-screen').classList.add('hidden');
@@ -992,6 +1005,7 @@
             const muzzleWorldPos = new THREE.Vector3();
             limbs.gun.getWorldPosition(muzzleWorldPos);
             
+            // Visual tracer starts from gun, but actual hit is center-screen (Raycast)
             const tracer = new THREE.Mesh(new THREE.SphereGeometry(0.15, 4, 4), new THREE.MeshBasicMaterial({color: 0xffff00}));
             tracer.position.copy(muzzleWorldPos);
             scene.add(tracer);
@@ -1048,7 +1062,6 @@
             ctx.fillStyle = '#0f0'; // GREEN Player
             const px = (playerGroup.position.x * scale); const pz = (playerGroup.position.z * scale);
             ctx.save(); ctx.translate(center + px, center + pz); 
-            // FIX: Removed offset Math.PI to fix orientation
             ctx.rotate(-playerGroup.rotation.y + Math.PI); 
             ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(4, -4); ctx.lineTo(-4, -4); ctx.fill(); ctx.restore();
         }
@@ -1073,7 +1086,6 @@
         function animateHumanoid(rig, speed, isMoving, lookPitch = 0) {
             const limbs = rig.userData.limbs;
             limbs.head.rotation.x = lookPitch * 0.5;
-            // FIXED AIM: Adjust offset to point forward at crosshair
             limbs.armR.rotation.x = -1.5 + lookPitch; 
 
             if (!rig.userData.isPlayer && rig.userData.hpBar) rig.userData.hpBar.parent.lookAt(camera.position);
@@ -1231,6 +1243,7 @@
                     bot.translateZ(botSpeed);
                     animateHumanoid(bot, botSpeed, true, 0);
                 } else {
+                    // FRENZY AI
                     let botMoving = false;
                     let canSeePlayer = false;
                     
@@ -1267,6 +1280,7 @@
                             anim();
                         }
                     } else {
+                        // Patrol/Parkour Logic
                         if(bot.userData.state === 'camp' && !inGas) {} else {
                             const target = bot.userData.patrolTarget;
                             if(target) {
