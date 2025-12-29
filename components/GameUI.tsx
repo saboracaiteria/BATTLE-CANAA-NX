@@ -11,40 +11,91 @@ interface Props {
 }
 
 const GameUI: React.FC<Props> = ({ gameState, stats, settings, setSettings, onTogglePause, inputRef }) => {
+  // Estado do Joystick
   const [joyPos, setJoyPos] = useState({ x: 0, y: 0 });
+  const [isTouchingJoystick, setIsTouchingJoystick] = useState(false);
+  const joystickRef = useRef<HTMLDivElement>(null);
+  const startTouchRef = useRef<{ x: number, y: number } | null>(null);
   const lastTouchRef = useRef<{ x: number, y: number } | null>(null);
   const isPaused = gameState === GameState.PAUSED;
 
-  const handleJoystick = (e: React.TouchEvent) => {
+  // Manipulação do Joystick
+  const handleJoystickStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     const rect = e.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    const dx = touch.clientX - centerX;
-    const dy = touch.clientY - centerY;
-    const dist = Math.min(rect.width / 2, Math.sqrt(dx * dx + dy * dy));
-    const angle = Math.atan2(dy, dx);
-    const jx = Math.cos(angle) * dist;
-    const jy = Math.sin(angle) * dist;
-    setJoyPos({ x: jx, y: jy });
-    inputRef.current.x = jx / (rect.width / 2);
-    inputRef.current.y = jy / (rect.height / 2);
+
+    // Só ativa se tocar na metade esquerda da tela e na parte inferior
+    if (touch.clientX < window.innerWidth / 2 && touch.clientY > window.innerHeight / 2) {
+      setIsTouchingJoystick(true);
+      startTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      updateJoystick(touch.clientX, touch.clientY, centerX, centerY, rect.width / 2);
+    }
   };
 
+  const handleJoystickMove = (e: React.TouchEvent) => {
+    if (!isTouchingJoystick || !startTouchRef.current) return;
+
+    const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    updateJoystick(touch.clientX, touch.clientY, centerX, centerY, rect.width / 2);
+  };
+
+  const updateJoystick = (clientX: number, clientY: number, centerX: number, centerY: number, radius: number) => {
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const distance = Math.min(Math.sqrt(dx * dx + dy * dy), radius);
+    const angle = Math.atan2(dy, dx);
+
+    const x = Math.cos(angle) * distance;
+    const y = Math.sin(angle) * distance;
+
+    setJoyPos({ x, y });
+
+    // Atualiza inputRef
+    inputRef.current.x = x / radius;
+    inputRef.current.y = y / radius;
+  };
+
+  const handleJoystickEnd = () => {
+    setIsTouchingJoystick(false);
+    setJoyPos({ x: 0, y: 0 });
+    inputRef.current.x = 0;
+    inputRef.current.y = 0;
+  };
+
+  // Manipulação da Câmera (Touch)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches[0].clientX > window.innerWidth / 2) {
-      lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    // Apenas considera toque na metade direita para câmera
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      if (touch.clientX > window.innerWidth / 2) {
+        lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+        break;
+      }
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (lastTouchRef.current) {
-      const touch = e.touches[0];
-      const dx = touch.clientX - lastTouchRef.current.x;
-      const dy = touch.clientY - lastTouchRef.current.y;
-      inputRef.current.yaw = (inputRef.current.yaw || 0) - dx * 0.009 * settings.sens;
-      inputRef.current.pitch = (inputRef.current.pitch || 0) + dy * 0.009 * settings.sens;
-      lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+      // Encontra o toque que está controlando a câmera
+      for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        if (touch.clientX > window.innerWidth / 2) {
+          const dx = touch.clientX - lastTouchRef.current.x;
+          const dy = touch.clientY - lastTouchRef.current.y;
+
+          inputRef.current.yaw = (inputRef.current.yaw || 0) - dx * 0.005 * settings.sens;
+          inputRef.current.pitch = (inputRef.current.pitch || 0) + dy * 0.005 * settings.sens;
+
+          lastTouchRef.current = { x: touch.clientX, y: touch.clientY };
+          break;
+        }
+      }
     }
   };
 
@@ -60,7 +111,28 @@ const GameUI: React.FC<Props> = ({ gameState, stats, settings, setSettings, onTo
   const armorColor = stats.armor.level === 3 ? 'text-yellow-400' : stats.armor.level === 2 ? 'text-blue-400' : 'text-green-400';
 
   return (
-    <div className="absolute inset-0 pointer-events-none text-white select-none overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
+    <div className="absolute inset-0 pointer-events-none text-white select-none overflow-hidden"
+      onTouchStart={(e) => { handleTouchStart(e); }}
+      onTouchMove={(e) => { handleTouchMove(e); }}
+    >
+
+      {/* JOYSTICK VIRTUAL (Esquerda Inferior) */}
+      <div
+        className="pointer-events-auto absolute bottom-10 left-10 w-40 h-40 bg-white/10 rounded-full border-2 border-white/30 backdrop-blur-sm touch-none"
+        onTouchStart={handleJoystickStart}
+        onTouchMove={handleJoystickMove}
+        onTouchEnd={handleJoystickEnd}
+        ref={joystickRef}
+      >
+        <div
+          className="absolute w-16 h-16 bg-white/50 rounded-full shadow-lg"
+          style={{
+            left: '50%',
+            top: '50%',
+            transform: `translate(calc(-50% + ${joyPos.x}px), calc(-50% + ${joyPos.y}px))`
+          }}
+        />
+      </div>
 
       {/* HUD SUPERIOR */}
       <div className="absolute top-0 inset-x-0 p-5 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
@@ -75,6 +147,14 @@ const GameUI: React.FC<Props> = ({ gameState, stats, settings, setSettings, onTo
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-yellow-400 rounded-full shadow-[0_0_15px_#facc15] z-10 animate-pulse border-2 border-white"></div>
             <div className="absolute top-0 left-0 w-full h-full bg-[conic-gradient(from_0deg,transparent,rgba(6,182,212,0.2),transparent)] animate-[spin_3s_linear_infinite]"></div>
           </div>
+          <button
+            className="pointer-events-auto w-20 h-20 bg-red-500/50 rounded-full flex items-center justify-center border-4 border-red-400 active:scale-90 active:bg-red-500 transition-all absolute bottom-24 right-10 shadow-[0_0_30px_rgba(239,68,68,0.5)] z-50"
+            onTouchStart={() => { inputRef.current.firing = true; }}
+            onTouchEnd={() => { inputRef.current.firing = false; }}
+          >
+            <i className="fas fa-crosshairs text-3xl"></i>
+          </button>
+
           <button className="pointer-events-auto w-14 h-14 bg-white/10 rounded-3xl flex items-center justify-center border border-white/20 active:scale-90 transition-transform" onClick={onTogglePause}>
             <i className="fas fa-th-large text-xl"></i>
           </button>
