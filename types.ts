@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 
 export enum GameState {
   START,
@@ -89,6 +90,7 @@ export interface PlayerStats {
   weapons: Weapon[];
   grenades: Map<GrenadeType, Grenade>;
   activePowerUps: PowerUp[];
+  isInvulnerable?: boolean;
 }
 
 export enum BotState {

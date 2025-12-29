@@ -288,10 +288,12 @@ const GameSceneBackup: React.FC<Props> = ({ gameState, settings, onUpdateStats, 
                     core.zoneTimer -= dt;
                     onUpdateStats({ zoneTimer: Math.ceil(core.zoneTimer) });
                 } else {
-                    if (core.zoneRadius > 20) core.zoneRadius -= 0.2;
+                    // Raio mínimo aumentado de 20 para 80 para ser mais jogável
+                    if (core.zoneRadius > 80) core.zoneRadius -= 0.1;
                     zone.scale.set(core.zoneRadius / MAP_SIZE, 1, core.zoneRadius / MAP_SIZE);
                     if (player.position.distanceTo(new THREE.Vector3(0, 0, 0)) > core.zoneRadius) {
-                        core.health -= 1.0; onUpdateStats({ health: core.health });
+                        // Dano reduzido de 1.0 para 0.5 por frame
+                        core.health -= 0.5; onUpdateStats({ health: core.health });
                         if (core.health <= 0) onGameOver(false);
                     }
                 }

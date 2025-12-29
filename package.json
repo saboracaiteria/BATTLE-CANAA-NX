@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist -r https://github.com/saboracaiteria/batalha-canaa.git"
+    "deploy": "gh-pages -d dist -r https://github.com/saboracaiteria/batalha-canaa.git",
+    "quick-deploy": "git add . && git commit -m \"update\" && git push && npm run deploy"
   },
   "dependencies": {
     "react": "^19.2.3",

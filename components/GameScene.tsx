@@ -32,6 +32,8 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
         health: 100, kills: 0, alive: 0,
         zoneRadius: MAP_SIZE, zoneTimer: 60,
         verticalVelocity: 0, fireCooldown: 0, gameTime: 0,
+        spawnGraceTimer: 5.0, // 5 seconds of protection
+        botThinkOffset: 0,
         pcInput: { forward: false, backward: false, left: false, right: false },
         tracersPool: [] as THREE.Mesh[],
         activeTracers: [] as any[]
@@ -58,10 +60,14 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
         sceneRef.current = scene;
 
         const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 500);
-        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        const renderer = new THREE.WebGLRenderer({
+            antialias: false,
+            powerPreference: "high-performance",
+            precision: "lowp" // Optimization for mobile
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.2));
-        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(1.0); // Maximum FPS: Disable high-DPI scaling
+        renderer.shadowMap.enabled = settings.graphicsQuality === 'ultra'; // Only shadows on ultra
         renderer.shadowMap.type = THREE.BasicShadowMap;
         containerRef.current.appendChild(renderer.domElement);
 
@@ -175,24 +181,27 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
             return rig;
         };
 
-        const player = createHuman(0xffff00, true); player.position.set(0, 5, 0);
+        const player = createHuman(0xffff00, true);
+        player.position.set(0, 5, 0);
+        player.userData.invulnerable = true;
         scene.add(player); playerGroupRef.current = player;
 
-        // Spawn Bots: 50% Inside Houses, 50% Edge of Map
+        // --- SPAWN BOTS (DISTANT FROM PLAYER) ---
         for (let i = 0; i < settings.botCount; i++) {
             const b = createHuman(Math.random() * 0xffffff, false);
 
-            if (Math.random() > 0.5 && houseLocations.length > 0) {
-                // Camper Bot
-                const house = houseLocations[Math.floor(Math.random() * houseLocations.length)];
-                b.position.set(house.x, 5, house.z);
-            } else {
-                // Edge Bot (In Gas or near)
+            let spawnX, spawnZ;
+            let attempts = 0;
+            // Ensure bots are at least 40 units away from player
+            do {
                 const angle = Math.random() * Math.PI * 2;
-                const dist = MAP_SIZE - 10 - Math.random() * 20;
-                b.position.set(Math.cos(angle) * dist, 5, Math.sin(angle) * dist);
-            }
+                const dist = 40 + Math.random() * (MAP_SIZE - 50);
+                spawnX = Math.cos(angle) * dist;
+                spawnZ = Math.sin(angle) * dist;
+                attempts++;
+            } while (attempts < 10 && Math.sqrt(spawnX * spawnX + spawnZ * spawnZ) < 40);
 
+            b.position.set(spawnX, 5, spawnZ);
             b.userData.patrolTarget.set((Math.random() - 0.5) * 200, 0, (Math.random() - 0.5) * 200);
             scene.add(b); enemiesRef.current.push(b);
         }
@@ -251,6 +260,9 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
             if (hits.length > 0 && hits[0].distance < 100) {
                 const victim = hits[0].object.parent;
                 if (victim) {
+                    // SPAWN PROTECTION CHECK
+                    if (victim.userData.isPlayer && victim.userData.invulnerable) return;
+
                     victim.userData.hp -= 34; // 3 hit kill
                     if (victim.userData.hpBar) victim.userData.hpBar.scale.x = Math.max(0, victim.userData.hp / 100);
 
@@ -259,7 +271,10 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
                             scene.remove(victim); enemiesRef.current = enemiesRef.current.filter(e => e !== victim);
                             internalRef.current.kills++; onUpdateStats({ kills: internalRef.current.kills });
                             if (enemiesRef.current.length === 0) onGameOver(true);
-                        } else { onUpdateStats({ health: 0 }); onGameOver(false); }
+                        } else {
+                            // Only die if not invulnerable
+                            onUpdateStats({ health: 0 }); onGameOver(false);
+                        }
                     } else if (!isPlayer) onUpdateStats({ health: victim.userData.hp });
                 }
             }
@@ -292,7 +307,16 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
                 if (core.zoneRadius > 10) core.zoneRadius -= 2 * dt;
                 zone.scale.set(core.zoneRadius / MAP_SIZE, 1, core.zoneRadius / MAP_SIZE);
                 onUpdateStats({ isGasActive: true });
-                if (player.position.length() > core.zoneRadius) { core.health -= 5 * dt; onUpdateStats({ health: core.health }); if (core.health <= 0) onGameOver(false); }
+                if (player.position.length() > core.zoneRadius) {
+                    if (!player.userData.invulnerable) {
+                        core.health -= 5 * dt; onUpdateStats({ health: core.health }); if (core.health <= 0) onGameOver(false);
+                    }
+                }
+            }
+
+            // UI SYNC
+            if (core.gameTime % 0.5 < dt) {
+                onUpdateStats({ isInvulnerable: player.userData.invulnerable });
             }
 
             // MOVEMENT
@@ -325,24 +349,39 @@ const GameScene: React.FC<Props> = ({ gameState, settings, onUpdateStats, onGame
             if (input.firing && core.fireCooldown <= 0) { core.fireCooldown = 0.15; shoot(player, true); }
             if (core.fireCooldown > 0) core.fireCooldown -= dt;
 
-            enemiesRef.current.forEach(bot => {
+            // SPAWN PROTECTION TIMER
+            if (core.spawnGraceTimer > 0) {
+                core.spawnGraceTimer -= dt;
+                if (core.spawnGraceTimer <= 0) {
+                    player.userData.invulnerable = false;
+                }
+            }
+
+            // STAGGERED BOT UPDATE (FPS OPTIMIZATION)
+            core.botThinkOffset = (core.botThinkOffset + 1) % 3;
+            enemiesRef.current.forEach((bot, idx) => {
+                // Physics always updates for smooth movement
                 updatePhys(bot, dt);
+
+                // AI Logic only updates every 3 frames to save CPU
+                if (idx % 3 !== core.botThinkOffset) return;
+
                 const distToPlayer = bot.position.distanceTo(player.position);
 
-                // STOP if closer than 5 meters to avoid merging
-                if (distToPlayer < 50) {
+                // IGNORE PLAYER DURING GRACE PERIOD
+                if (distToPlayer < 50 && !player.userData.invulnerable) {
                     bot.lookAt(player.position.x, bot.position.y, player.position.z);
 
                     // Move only if not too close
                     if (distToPlayer > 5) {
-                        bot.translateZ(bot.userData.speed * dt);
+                        bot.translateZ(bot.userData.speed * dt * 3); // Multiply by 3 because we skip frames
                     }
 
                     // Shoot logic
-                    if (Math.random() < 0.02) shoot(bot, false);
+                    if (Math.random() < 0.05) shoot(bot, false); // Adjusted probability due to frame skip
                 } else {
                     bot.lookAt(bot.userData.patrolTarget.x, bot.position.y, bot.userData.patrolTarget.z);
-                    bot.translateZ(bot.userData.speed * 0.6 * dt);
+                    bot.translateZ(bot.userData.speed * 0.6 * dt * 3);
                     if (bot.position.distanceTo(bot.userData.patrolTarget) < 2) bot.userData.patrolTarget.set((Math.random() - 0.5) * MAP_SIZE, 0, (Math.random() - 0.5) * MAP_SIZE);
                 }
             });

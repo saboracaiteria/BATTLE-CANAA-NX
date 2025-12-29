@@ -166,6 +166,12 @@ const GameUI: React.FC<Props> = ({ gameState, stats, settings, setSettings, onTo
             <span className="text-xl font-black italic tracking-widest uppercase">Zona: {stats.zoneTimer}s</span>
           </div>
           {stats.zoneTimer === 0 && <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-[0.4em] animate-pulse">Encolhendo...</span>}
+          {stats.isInvulnerable && (
+            <div className="mt-2 px-6 py-1 bg-blue-500/80 rounded-full border border-blue-300 animate-pulse flex items-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+              <i className="fas fa-shield-halved text-xs"></i>
+              <span className="text-[10px] font-black uppercase tracking-widest text-white">ESCUDO ATIVO</span>
+            </div>
+          )}
         </div>
 
         {/* Direita: Status da Partida */}
